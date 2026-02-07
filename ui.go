@@ -284,7 +284,7 @@ func (a *App) updatePreview() {
 // --- Status bar ---
 
 func (a *App) updateStatusBar() {
-	a.statusBar.SetText(" [yellow]j/k[-] nav  [yellow]space[-] toggle  [yellow]e[-] edit  [yellow]u[-]p [yellow]d[-]own [yellow]s[-]top [yellow]c[-]ontinue [yellow]r[-]estart [yellow]p[-]ull  [yellow]SHIFT[-]=all  [yellow]y[-] copy  [yellow]?[-] help  [yellow]q[-] quit")
+	a.statusBar.SetText(" [yellow]j/k[-] nav  [yellow]space[-] toggle  [yellow]e[-] edit  [yellow]U[-]p [yellow]D[-]own=all  [yellow]s[-]top [yellow]c[-]ontinue [yellow]r[-]estart [yellow]p[-]ull  [yellow]SHIFT[-]=all  [yellow]y[-] copy  [yellow]?[-] help  [yellow]q[-] quit")
 }
 
 // --- Actions ---
@@ -343,15 +343,13 @@ func (a *App) showDockerConfirm(title, message string, borderColor tcell.Color, 
 	a.app.SetFocus(text)
 }
 
-func (a *App) confirmSingleAction(title, desc string, color tcell.Color, args ...string) {
+func (a *App) confirmSingleAction(title, desc string, color tcell.Color, action func()) {
 	opt := a.getSelectedOption()
 	if opt == nil {
 		return
 	}
-	msg := fmt.Sprintf("[yellow::b]%s[-:-:-]\n\nRun [green]docker compose %s[-] for [green]%s[-]?", title, desc, opt.Name)
-	a.showDockerConfirm(title, msg, color, func() {
-		a.dockerComposeSingle(args...)
-	})
+	msg := fmt.Sprintf("[yellow::b]%s[-:-:-]\n\nRun [green]docker %s[-] for [green]%s[-]?", title, desc, opt.Name)
+	a.showDockerConfirm(title, msg, color, action)
 }
 
 func (a *App) confirmGlobalAction(title, desc string, color tcell.Color, args ...string) {
@@ -383,12 +381,12 @@ func (a *App) showHelp() {
 			"  J / K         Scroll preview\n" +
 			"  [ / ]         Prev / next tab\n" +
 			"  1             Jump to options\n" +
-			"  2 / a         Jump to overrides\n" +
+			"  2             Jump to overrides\n" +
 			"  Tab           Cycle panels\n" +
 			"  Esc           Back / quit\n\n" +
-			"[green]Docker (panel 1, lowercase=single, SHIFT=all):[-]\n" +
-			"  u / U         Up (start containers)\n" +
-			"  d / D         Down (remove containers)\n" +
+			"[green]Docker (panel 1, lowercase=service, SHIFT=all):[-]\n" +
+			"  U             Up all (start containers)\n" +
+			"  D             Down all (remove containers)\n" +
 			"  s / S         Stop containers\n" +
 			"  c / C         Continue (start stopped)\n" +
 			"  r / R         Restart containers\n" +

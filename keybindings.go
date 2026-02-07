@@ -35,38 +35,32 @@ func (a *App) setupKeybindings() {
 		// Panel 0 only: Docker compose actions
 		if event.Key() == tcell.KeyRune && a.currentPanelIdx == 0 {
 			switch event.Rune() {
-			case 'u':
-				a.confirmSingleAction("Up", "up -d", tcell.ColorGreen, "up", "-d")
-				return nil
 			case 'U':
 				a.confirmGlobalAction("Up All", "up -d", tcell.ColorGreen, "up", "-d")
-				return nil
-			case 'd':
-				a.confirmSingleAction("Down", "down", tcell.ColorRed, "down")
 				return nil
 			case 'D':
 				a.confirmGlobalAction("Down All", "down", tcell.ColorRed, "down")
 				return nil
 			case 's':
-				a.confirmSingleAction("Stop", "stop", tcell.ColorYellow, "stop")
+				a.confirmSingleAction("Stop", "stop", tcell.ColorYellow, func() { a.dockerDirectSingle("stop") })
 				return nil
 			case 'S':
 				a.confirmGlobalAction("Stop All", "stop", tcell.ColorYellow, "stop")
 				return nil
 			case 'c':
-				a.confirmSingleAction("Start", "start", tcell.ColorGreen, "start")
+				a.confirmSingleAction("Start", "start", tcell.ColorGreen, func() { a.dockerDirectSingle("start") })
 				return nil
 			case 'C':
 				a.confirmGlobalAction("Start All", "start", tcell.ColorGreen, "start")
 				return nil
 			case 'r':
-				a.confirmSingleAction("Restart", "restart", tcell.ColorYellow, "restart")
+				a.confirmSingleAction("Restart", "restart", tcell.ColorYellow, func() { a.dockerDirectSingle("restart") })
 				return nil
 			case 'R':
 				a.confirmGlobalAction("Restart All", "restart", tcell.ColorYellow, "restart")
 				return nil
 			case 'p':
-				a.confirmSingleAction("Pull", "pull", tcell.ColorBlue, "pull")
+				a.confirmSingleAction("Pull", "pull", tcell.ColorBlue, func() { a.dockerPullSingle() })
 				return nil
 			case 'P':
 				a.confirmGlobalAction("Pull All", "pull", tcell.ColorBlue, "pull")
@@ -84,7 +78,7 @@ func (a *App) setupKeybindings() {
 				a.focusPanel(0)
 				a.updatePreview()
 				return nil
-			case '2', 'a':
+			case '2':
 				a.focusPanel(1)
 				a.updatePreview()
 				return nil

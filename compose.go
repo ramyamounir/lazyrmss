@@ -368,7 +368,37 @@ func (a *App) dockerComposeGlobal(args ...string) {
 	a.runDockerCompose(global, args...)
 }
 
-func (a *App) dockerComposeSingle(args ...string) {
+func (a *App) runDockerDirect(targets []string, args ...string) {
+	cmdArgs := append(args, targets...)
+	cmdStr := strings.Join(cmdArgs, " ")
+	a.logView.Clear()
+	fmt.Fprintf(a.logView, "[yellow]$ docker %s[-]\n", cmdStr)
+
+	cmd := exec.Command("docker", cmdArgs...)
+
+	writer := &logWriter{
+		app:  a.app,
+		view: a.logView,
+		ansi: tview.ANSIWriter(a.logView),
+	}
+	cmd.Stdout = writer
+	cmd.Stderr = writer
+
+	go func() {
+		err := cmd.Run()
+		a.app.QueueUpdateDraw(func() {
+			if err != nil {
+				fmt.Fprintf(a.logView, "\n[red]✗ %v[-]\n", err)
+			} else {
+				fmt.Fprintf(a.logView, "\n[green]✓ Done[-]\n")
+			}
+			a.logView.ScrollToEnd()
+		})
+		a.refreshDockerStatus()
+	}()
+}
+
+func (a *App) dockerDirectSingle(args ...string) {
 	opt := a.getSelectedOption()
 	if opt == nil {
 		return
@@ -377,7 +407,45 @@ func (a *App) dockerComposeSingle(args ...string) {
 	if err != nil {
 		return
 	}
-	a.runDockerCompose(resolved, args...)
+	names := extractContainerNames(resolved)
+	if len(names) == 0 {
+		return
+	}
+	a.runDockerDirect(names, args...)
+}
+
+func extractImageNames(resolved map[string]interface{}) []string {
+	services, ok := resolved["services"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	var names []string
+	for _, svcVal := range services {
+		svcMap, ok := svcVal.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if img, ok := svcMap["image"].(string); ok && img != "" {
+			names = append(names, img)
+		}
+	}
+	return names
+}
+
+func (a *App) dockerPullSingle() {
+	opt := a.getSelectedOption()
+	if opt == nil {
+		return
+	}
+	resolved, err := resolveOption(opt)
+	if err != nil {
+		return
+	}
+	images := extractImageNames(resolved)
+	if len(images) == 0 {
+		return
+	}
+	a.runDockerDirect(images, "pull")
 }
 
 func (a *App) refreshDockerStatus() {

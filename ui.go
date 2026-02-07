@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -27,7 +28,21 @@ func (a *App) setupUI() {
 		SetTitle(" [1] Options ").
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderColor(tcell.ColorDefault)
-	a.optionsList.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
+	// NOTE: Don't use ChangedFunc for refreshing addons/preview — tview may
+	// fire it before GetCurrentItem() reflects the new index. Instead,
+	// cursorDown/cursorUp and refreshAll handle refreshes explicitly.
+
+	// Addons list (persistent panel)
+	a.addonsList = tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(selectionColor).
+		SetSelectedTextColor(tcell.ColorWhite)
+	a.addonsList.SetBorder(true).
+		SetTitle(" [2] Overrides ").
+		SetTitleAlign(tview.AlignLeft).
+		SetBorderColor(tcell.ColorDefault)
+	a.addonsList.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
 		a.updatePreview()
 	})
 
@@ -47,12 +62,13 @@ func (a *App) setupUI() {
 		SetTextAlign(tview.AlignLeft)
 
 	// Navigable panels
-	a.panels = []tview.Primitive{a.optionsList}
+	a.panels = []tview.Primitive{a.optionsList, a.addonsList}
 
 	// Layout
 	leftFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(a.tabBar, 1, 0, false).
-		AddItem(a.optionsList, 0, 1, true)
+		AddItem(a.optionsList, 0, 2, true).
+		AddItem(a.addonsList, 0, 1, false)
 
 	mainFlex := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(leftFlex, 0, 1, true).
@@ -75,6 +91,7 @@ func (a *App) setupUI() {
 
 func (a *App) refreshAll() {
 	a.refreshOptionsList()
+	a.refreshAddonsList()
 	a.updateTabBar()
 	a.updatePanelTitles()
 	a.updatePreview()
@@ -97,6 +114,34 @@ func (a *App) refreshOptionsList() {
 	}
 	if currentIdx >= 0 {
 		a.optionsList.SetCurrentItem(currentIdx)
+	}
+}
+
+func (a *App) refreshAddonsList() {
+	currentIdx := a.addonsList.GetCurrentItem()
+	a.addonsList.Clear()
+
+	opt := a.getSelectedOption()
+	if opt == nil || len(opt.Addons) == 0 {
+		return
+	}
+
+	for _, addon := range opt.Addons {
+		var marker string
+		if opt.ActiveAddons[addon.Name] {
+			marker = "[green]\u2713[-] "
+		} else {
+			marker = "[darkgray]\u2717[-] "
+		}
+		label := fmt.Sprintf("%s[%s]%s[-] %s", marker, addon.Color, addon.Label, addon.Name)
+		a.addonsList.AddItem(label, "", 0, nil)
+	}
+
+	if currentIdx >= len(opt.Addons) {
+		currentIdx = len(opt.Addons) - 1
+	}
+	if currentIdx >= 0 {
+		a.addonsList.SetCurrentItem(currentIdx)
 	}
 }
 
@@ -145,6 +190,18 @@ func (a *App) getSelectedOption() *Option {
 	return nil
 }
 
+func (a *App) getSelectedAddon() *Addon {
+	opt := a.getSelectedOption()
+	if opt == nil || len(opt.Addons) == 0 {
+		return nil
+	}
+	idx := a.addonsList.GetCurrentItem()
+	if idx >= 0 && idx < len(opt.Addons) {
+		return &opt.Addons[idx]
+	}
+	return nil
+}
+
 // --- Tab bar ---
 
 func (a *App) updateTabBar() {
@@ -165,6 +222,13 @@ func (a *App) updatePanelTitles() {
 		catName := strings.ToUpper(a.categories[a.activeTabIdx].Name[:1]) + a.categories[a.activeTabIdx].Name[1:]
 		a.optionsList.SetTitle(fmt.Sprintf(" [1] %s ", catName))
 	}
+
+	opt := a.getSelectedOption()
+	if opt != nil {
+		a.addonsList.SetTitle(fmt.Sprintf(" [2] %s ", opt.Name))
+	} else {
+		a.addonsList.SetTitle(" [2] Overrides ")
+	}
 }
 
 // --- Preview ---
@@ -174,9 +238,35 @@ func (a *App) updatePreview() {
 
 	opt := a.getSelectedOption()
 	if opt == nil {
+		a.previewView.SetTitle(" Preview ")
 		a.previewView.SetText("[darkgray]No option selected[-]")
 		return
 	}
+
+	// When focused on addons panel, show raw addon YAML
+	if a.currentPanelIdx == 1 {
+		addon := a.getSelectedAddon()
+		if addon == nil {
+			a.previewView.SetTitle(" Preview ")
+			a.previewView.SetText("[darkgray]No addon selected[-]")
+			return
+		}
+
+		a.previewView.SetTitle(fmt.Sprintf(" %s ", addon.Name))
+		data, err := os.ReadFile(addon.File)
+		if err != nil {
+			a.previewView.SetText(fmt.Sprintf("[red]Error: %v[-]", err))
+			return
+		}
+
+		highlighted := highlightCode(string(data), "yaml")
+		a.previewView.SetText(highlighted)
+		a.previewView.ScrollToBeginning()
+		return
+	}
+
+	// Default: show resolved compose
+	a.previewView.SetTitle(fmt.Sprintf(" %s ", opt.Name))
 
 	resolved, err := resolveOption(opt)
 	if err != nil {
@@ -198,7 +288,7 @@ func (a *App) updatePreview() {
 // --- Status bar ---
 
 func (a *App) updateStatusBar() {
-	a.statusBar.SetText(" [yellow]j/k[-] navigate  [yellow]space[-] toggle  [yellow]a[-] addons  [yellow]u[-] up  [yellow]s[-] down  [yellow]y[-] copy  [yellow]?[-] help  [yellow][\\[/\\]][-] tabs  [yellow]q[-] quit")
+	a.statusBar.SetText(" [yellow]j/k[-] navigate  [yellow]space[-] toggle  [yellow]1/2[-] panels  [yellow]u[-] up  [yellow]s[-] down  [yellow]y[-] copy  [yellow]?[-] help  [yellow][\\[/\\]][-] tabs  [yellow]q[-] quit")
 }
 
 // --- Actions ---
@@ -213,69 +303,13 @@ func (a *App) toggleOption() {
 	a.refreshAll()
 }
 
-// --- Addon picker modal ---
-
-func (a *App) showAddonPicker() {
-	opt := a.getSelectedOption()
-	if opt == nil || len(opt.Addons) == 0 {
-		return
-	}
-	a.addonOpen = true
-
-	selectionColor := tcell.NewRGBColor(106, 159, 181)
-
-	a.addonList = tview.NewList().
-		ShowSecondaryText(false).
-		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(selectionColor).
-		SetSelectedTextColor(tcell.ColorWhite)
-
-	a.refreshAddonList(opt)
-
-	a.addonList.SetBorder(true).
-		SetTitle(fmt.Sprintf(" Addons: %s ", opt.Name)).
-		SetTitleAlign(tview.AlignCenter).
-		SetBorderColor(tcell.ColorGreen)
-
-	height := len(opt.Addons) + 2
-	if height > 15 {
-		height = 15
-	}
-
-	a.pages.AddPage("addons", modal(a.addonList, 40, height), true, true)
-	a.app.SetFocus(a.addonList)
-}
-
-func (a *App) refreshAddonList(opt *Option) {
-	currentIdx := a.addonList.GetCurrentItem()
-	a.addonList.Clear()
-
-	for _, addon := range opt.Addons {
-		var marker string
-		if opt.ActiveAddons[addon.Name] {
-			marker = "[green]\u2713[-] "
-		} else {
-			marker = "[darkgray]\u2717[-] "
-		}
-		label := fmt.Sprintf("%s[%s]%s[-] %s", marker, addon.Color, addon.Label, addon.Name)
-		a.addonList.AddItem(label, "", 0, nil)
-	}
-
-	if currentIdx >= len(opt.Addons) {
-		currentIdx = len(opt.Addons) - 1
-	}
-	if currentIdx >= 0 {
-		a.addonList.SetCurrentItem(currentIdx)
-	}
-}
-
-func (a *App) toggleAddonInPicker() {
+func (a *App) toggleAddon() {
 	opt := a.getSelectedOption()
 	if opt == nil {
 		return
 	}
 
-	idx := a.addonList.GetCurrentItem()
+	idx := a.addonsList.GetCurrentItem()
 	if idx < 0 || idx >= len(opt.Addons) {
 		return
 	}
@@ -287,17 +321,10 @@ func (a *App) toggleAddonInPicker() {
 		opt.ActiveAddons[addonName] = true
 	}
 
-	a.refreshAddonList(opt)
 	a.saveState()
+	a.refreshAddonsList()
 	a.refreshOptionsList()
 	a.updatePreview()
-}
-
-func (a *App) closeAddonPicker() {
-	a.addonOpen = false
-	a.pages.RemovePage("addons")
-	a.app.SetFocus(a.panels[a.currentPanelIdx])
-	a.updateBorderColors()
 }
 
 // --- Confirm modals ---
@@ -364,16 +391,17 @@ func (a *App) showHelp() {
 			"  J / K         Scroll preview\n" +
 			"  [ / ]         Prev / next tab\n" +
 			"  1             Jump to options\n" +
-			"  Tab           Cycle panels\n\n" +
+			"  2 / a         Jump to overrides\n" +
+			"  Tab           Cycle panels\n" +
+			"  Esc           Back / quit\n\n" +
 			"[green]Actions:[-]\n" +
-			"  Space / Enter Toggle option\n" +
-			"  a             Open addon picker\n" +
+			"  Space / Enter Toggle item\n" +
 			"  u             Docker compose up\n" +
 			"  s             Docker compose down\n" +
 			"  y             Copy preview YAML\n" +
 			"  Y             Copy global compose\n\n" +
 			"[green]Meta:[-]\n" +
-			"  q / Esc       Quit\n" +
+			"  q             Quit\n" +
 			"  ?             This help\n\n" +
 			"[darkgray]Press Escape or q to close[-]")
 
@@ -382,7 +410,7 @@ func (a *App) showHelp() {
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorGreen)
 
-	a.pages.AddPage("help", modal(helpText, 45, 22), true, true)
+	a.pages.AddPage("help", modal(helpText, 45, 24), true, true)
 	a.app.SetFocus(helpText)
 }
 
@@ -396,6 +424,19 @@ func (a *App) closeHelp() {
 // --- Clipboard ---
 
 func (a *App) copyPreviewToClipboard() {
+	if a.currentPanelIdx == 1 {
+		addon := a.getSelectedAddon()
+		if addon == nil {
+			return
+		}
+		data, err := os.ReadFile(addon.File)
+		if err != nil {
+			return
+		}
+		copyToClipboard(string(data))
+		return
+	}
+
 	opt := a.getSelectedOption()
 	if opt == nil {
 		return

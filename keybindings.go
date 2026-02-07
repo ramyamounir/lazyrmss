@@ -7,40 +7,6 @@ func (a *App) setupKeybindings() {
 
 		// === MODAL PRIORITY CHAIN ===
 
-		if a.addonOpen {
-			switch event.Key() {
-			case tcell.KeyEsc:
-				a.closeAddonPicker()
-				return nil
-			case tcell.KeyRune:
-				switch event.Rune() {
-				case 'q':
-					a.closeAddonPicker()
-					return nil
-				case 'j':
-					count := a.addonList.GetItemCount()
-					current := a.addonList.GetCurrentItem()
-					if current < count-1 {
-						a.addonList.SetCurrentItem(current + 1)
-					}
-					return nil
-				case 'k':
-					current := a.addonList.GetCurrentItem()
-					if current > 0 {
-						a.addonList.SetCurrentItem(current - 1)
-					}
-					return nil
-				case ' ':
-					a.toggleAddonInPicker()
-					return nil
-				}
-			case tcell.KeyEnter:
-				a.toggleAddonInPicker()
-				return nil
-			}
-			return event
-		}
-
 		if a.helpOpen {
 			if event.Key() == tcell.KeyEsc || event.Rune() == 'q' {
 				a.closeHelp()
@@ -74,12 +40,19 @@ func (a *App) setupKeybindings() {
 				return nil
 			case '1':
 				a.focusPanel(0)
+				a.updatePreview()
+				return nil
+			case '2', 'a':
+				a.focusPanel(1)
+				a.updatePreview()
 				return nil
 			case 'h':
 				a.prevPanel()
+				a.updatePreview()
 				return nil
 			case 'l':
 				a.nextPanel()
+				a.updatePreview()
 				return nil
 			case 'j':
 				a.cursorDown()
@@ -100,10 +73,11 @@ func (a *App) setupKeybindings() {
 				a.nextTab()
 				return nil
 			case ' ':
-				a.toggleOption()
-				return nil
-			case 'a':
-				a.showAddonPicker()
+				if a.currentPanelIdx == 0 {
+					a.toggleOption()
+				} else if a.currentPanelIdx == 1 {
+					a.toggleAddon()
+				}
 				return nil
 			case 'u':
 				a.showComposeUpConfirm()
@@ -123,14 +97,25 @@ func (a *App) setupKeybindings() {
 			}
 		case tcell.KeyTab:
 			a.nextPanel()
+			a.updatePreview()
 			return nil
 		case tcell.KeyBacktab:
 			a.prevPanel()
+			a.updatePreview()
 			return nil
 		case tcell.KeyEnter:
-			a.toggleOption()
+			if a.currentPanelIdx == 0 {
+				a.toggleOption()
+			} else if a.currentPanelIdx == 1 {
+				a.toggleAddon()
+			}
 			return nil
 		case tcell.KeyEsc:
+			if a.currentPanelIdx == 1 {
+				a.focusPanel(0)
+				a.updatePreview()
+				return nil
+			}
 			a.app.Stop()
 			return nil
 		}

@@ -65,14 +65,13 @@ type App struct {
 
 	tabBar      *tview.TextView
 	optionsList *tview.List
+	addonsList  *tview.List
 	previewView *tview.TextView
 	statusBar   *tview.TextView
 
 	helpOpen      bool
-	addonOpen     bool
 	confirmOpen   bool
 	confirmAction func()
-	addonList     *tview.List
 
 	config       *Config
 	categories   []Category
@@ -171,6 +170,10 @@ func (a *App) cursorDown() {
 			list.SetCurrentItem(current + 1)
 		}
 	}
+	if a.currentPanelIdx == 0 {
+		a.refreshAddonsList()
+		a.updatePanelTitles()
+	}
 	a.updatePreview()
 }
 
@@ -180,6 +183,10 @@ func (a *App) cursorUp() {
 		if current > 0 {
 			list.SetCurrentItem(current - 1)
 		}
+	}
+	if a.currentPanelIdx == 0 {
+		a.refreshAddonsList()
+		a.updatePanelTitles()
 	}
 	a.updatePreview()
 }

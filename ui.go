@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -127,13 +128,12 @@ func (a *App) refreshAddonsList() {
 	}
 
 	for _, addon := range opt.Addons {
-		var marker string
+		var label string
 		if opt.ActiveAddons[addon.Name] {
-			marker = "[green]\u2713[-] "
+			label = fmt.Sprintf("[green]\u2713 %s %s[-]", addon.Label, addon.Name)
 		} else {
-			marker = "[darkgray]\u2717[-] "
+			label = fmt.Sprintf("[white]\u2717 %s %s[-]", addon.Label, addon.Name)
 		}
-		label := fmt.Sprintf("%s[%s]%s[-] %s", marker, addon.Color, addon.Label, addon.Name)
 		a.addonsList.AddItem(label, "", 0, nil)
 	}
 
@@ -151,21 +151,21 @@ func formatOptionLabel(opt *Option) string {
 	if opt.Enabled {
 		b.WriteString("[green]\u25cf[-] ")
 	} else {
-		b.WriteString("[darkgray]\u25cb[-] ")
+		b.WriteString("[white]\u25cb[-] ")
+	}
+
+	if opt.Enabled {
+		b.WriteString(fmt.Sprintf("[green]%s[-]", opt.Name))
+	} else {
+		b.WriteString(fmt.Sprintf("[white]%s[-]", opt.Name))
 	}
 
 	for _, addon := range opt.Addons {
 		if opt.ActiveAddons[addon.Name] {
-			b.WriteString(fmt.Sprintf("[%s]%s[-] ", addon.Color, addon.Label))
+			b.WriteString(fmt.Sprintf(" [green](%s)[-]", addon.Label))
 		} else {
-			b.WriteString(fmt.Sprintf("[darkgray]%s[-] ", addon.Label))
+			b.WriteString(fmt.Sprintf(" [white](%s)[-]", addon.Label))
 		}
-	}
-
-	if opt.Enabled {
-		b.WriteString(opt.Name)
-	} else {
-		b.WriteString(fmt.Sprintf("[darkgray]%s[-]", opt.Name))
 	}
 
 	return b.String()
@@ -211,7 +211,7 @@ func (a *App) updateTabBar() {
 		if i == a.activeTabIdx {
 			parts = append(parts, fmt.Sprintf("[green::b] %s [-:-:-]", name))
 		} else {
-			parts = append(parts, fmt.Sprintf("[darkgray] %s [-]", name))
+			parts = append(parts, fmt.Sprintf("[white] %s [-]", name))
 		}
 	}
 	a.tabBar.SetText(strings.Join(parts, "\u2502"))
@@ -239,33 +239,11 @@ func (a *App) updatePreview() {
 	opt := a.getSelectedOption()
 	if opt == nil {
 		a.previewView.SetTitle(" Preview ")
-		a.previewView.SetText("[darkgray]No option selected[-]")
+		a.previewView.SetText("[white]No option selected[-]")
 		return
 	}
 
-	// When focused on addons panel, show raw addon YAML
-	if a.currentPanelIdx == 1 {
-		addon := a.getSelectedAddon()
-		if addon == nil {
-			a.previewView.SetTitle(" Preview ")
-			a.previewView.SetText("[darkgray]No addon selected[-]")
-			return
-		}
-
-		a.previewView.SetTitle(fmt.Sprintf(" %s ", addon.Name))
-		data, err := os.ReadFile(addon.File)
-		if err != nil {
-			a.previewView.SetText(fmt.Sprintf("[red]Error: %v[-]", err))
-			return
-		}
-
-		highlighted := highlightCode(string(data), "yaml")
-		a.previewView.SetText(highlighted)
-		a.previewView.ScrollToBeginning()
-		return
-	}
-
-	// Default: show resolved compose
+	// Always show resolved compose for the selected option
 	a.previewView.SetTitle(fmt.Sprintf(" %s ", opt.Name))
 
 	resolved, err := resolveOption(opt)
@@ -288,7 +266,7 @@ func (a *App) updatePreview() {
 // --- Status bar ---
 
 func (a *App) updateStatusBar() {
-	a.statusBar.SetText(" [yellow]j/k[-] navigate  [yellow]space[-] toggle  [yellow]1/2[-] panels  [yellow]u[-] up  [yellow]s[-] down  [yellow]y[-] copy  [yellow]?[-] help  [yellow][\\[/\\]][-] tabs  [yellow]q[-] quit")
+	a.statusBar.SetText(" [yellow]j/k[-] navigate  [yellow]space[-] toggle  [yellow]e[-] edit  [yellow]1/2[-] panels  [yellow]u[-] up  [yellow]s[-] down  [yellow]y[-] copy  [yellow]?[-] help  [yellow][\\[/\\]][-] tabs  [yellow]q[-] quit")
 }
 
 // --- Actions ---
@@ -396,6 +374,7 @@ func (a *App) showHelp() {
 			"  Esc           Back / quit\n\n" +
 			"[green]Actions:[-]\n" +
 			"  Space / Enter Toggle item\n" +
+			"  e             Edit resource file\n" +
 			"  u             Docker compose up\n" +
 			"  s             Docker compose down\n" +
 			"  y             Copy preview YAML\n" +
@@ -403,14 +382,14 @@ func (a *App) showHelp() {
 			"[green]Meta:[-]\n" +
 			"  q             Quit\n" +
 			"  ?             This help\n\n" +
-			"[darkgray]Press Escape or q to close[-]")
+			"[white]Press Escape or q to close[-]")
 
 	helpText.SetBorder(true).
 		SetTitle(" Help ").
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorGreen)
 
-	a.pages.AddPage("help", modal(helpText, 45, 24), true, true)
+	a.pages.AddPage("help", modal(helpText, 45, 25), true, true)
 	a.app.SetFocus(helpText)
 }
 
@@ -422,6 +401,37 @@ func (a *App) closeHelp() {
 }
 
 // --- Clipboard ---
+
+func (a *App) editResourceFile() {
+	var filePath string
+	if a.currentPanelIdx == 0 {
+		opt := a.getSelectedOption()
+		if opt == nil {
+			return
+		}
+		filePath = opt.BaseFile
+	} else if a.currentPanelIdx == 1 {
+		addon := a.getSelectedAddon()
+		if addon == nil {
+			return
+		}
+		filePath = addon.File
+	}
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	a.app.Suspend(func() {
+		cmd := exec.Command(editor, filePath)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Run()
+	})
+	a.updatePreview()
+}
 
 func (a *App) copyPreviewToClipboard() {
 	if a.currentPanelIdx == 1 {

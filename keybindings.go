@@ -79,6 +79,9 @@ func (a *App) setupKeybindings() {
 					a.toggleAddon()
 				}
 				return nil
+			case 'e':
+				a.editResourceFile()
+				return nil
 			case 'u':
 				a.showComposeUpConfirm()
 				return nil

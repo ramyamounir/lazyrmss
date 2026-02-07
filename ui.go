@@ -12,7 +12,7 @@ import (
 
 func (a *App) setupUI() {
 	a.app = tview.NewApplication()
-	selectionColor := tcell.NewRGBColor(106, 159, 181)
+	selectionColor := tcell.NewRGBColor(68, 68, 88)
 
 	// Tab bar
 	a.tabBar = tview.NewTextView().
@@ -23,8 +23,7 @@ func (a *App) setupUI() {
 	a.optionsList = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(selectionColor).
-		SetSelectedTextColor(tcell.ColorWhite)
+		SetSelectedStyle(tcell.StyleDefault.Background(selectionColor))
 	a.optionsList.SetBorder(true).
 		SetTitle(" [1] Options ").
 		SetTitleAlign(tview.AlignLeft).
@@ -37,8 +36,7 @@ func (a *App) setupUI() {
 	a.addonsList = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(selectionColor).
-		SetSelectedTextColor(tcell.ColorWhite)
+		SetSelectedStyle(tcell.StyleDefault.Background(selectionColor))
 	a.addonsList.SetBorder(true).
 		SetTitle(" [2] Overrides ").
 		SetTitleAlign(tview.AlignLeft).

@@ -158,7 +158,7 @@ func (a *App) prevPanel() {
 }
 
 func (a *App) updateBorderColors() {
-	selectionColor := tcell.NewRGBColor(106, 159, 181)
+	selectionColor := tcell.NewRGBColor(68, 68, 88)
 
 	for _, p := range a.panels {
 		if box, ok := p.(interface {
@@ -167,7 +167,7 @@ func (a *App) updateBorderColors() {
 			box.SetBorderColor(tcell.ColorDefault)
 		}
 		if list, ok := p.(*tview.List); ok {
-			list.SetSelectedBackgroundColor(tcell.ColorDefault)
+			list.SetSelectedStyle(tcell.StyleDefault)
 		}
 	}
 
@@ -179,7 +179,7 @@ func (a *App) updateBorderColors() {
 			box.SetBorderColor(tcell.ColorGreen)
 		}
 		if list, ok := focused.(*tview.List); ok {
-			list.SetSelectedBackgroundColor(selectionColor)
+			list.SetSelectedStyle(tcell.StyleDefault.Background(selectionColor))
 		}
 	}
 }

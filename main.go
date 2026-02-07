@@ -95,8 +95,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
-	cfg.RMSSDir = expandPath(cfg.RMSSDir)
-	cfg.StateFile = expandPath(cfg.StateFile)
 	a.config = cfg
 
 	if err := a.discoverAll(); err != nil {

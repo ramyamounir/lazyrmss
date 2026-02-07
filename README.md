@@ -45,11 +45,10 @@ make run      # builds and runs immediately
 
 ## Setup
 
-lazyrmss reads service definitions from a directory tree under `~/.config/rmss/` (configurable). Create your service structure like this:
+lazyrmss reads service definitions from a resources directory (default `$XDG_CONFIG_HOME/rmss`). Create your service structure like this:
 
 ```
 ~/.config/rmss/
-├── configs.yaml                # optional configuration
 ├── services/                   # category (becomes a tab)
 │   ├── nginx/                  # service
 │   │   ├── base.yaml           # required — base Docker Compose config
@@ -65,7 +64,7 @@ lazyrmss reads service definitions from a directory tree under `~/.config/rmss/`
 │       └── base.yaml
 ```
 
-Each subdirectory of `rmss_dir` is a **category** (shown as a tab). Each subdirectory within a category is a **service**. Inside each service folder:
+Each subdirectory of `resources_dir` is a **category** (shown as a tab). Each subdirectory within a category is a **service**. Inside each service folder:
 
 - `base.yaml` — the base Docker Compose definition (required)
 - Any other `*.yaml` file — an addon that can be toggled on/off and deep-merged with the base
@@ -99,15 +98,16 @@ When the addon is enabled, it is deep-merged with `base.yaml` — maps merge rec
 
 ## Configuration
 
-Create `~/.config/rmss/configs.yaml` to override defaults:
+Create `~/.config/lazyrmss/config.yaml` to override defaults:
 
 ```yaml
-rmss_dir: "~/.config/rmss"              # root directory for categories
-state_file: "~/.config/rmss/state.yaml" # persistent state location
+resources_dir: "$XDG_CONFIG_HOME/rmss"  # root directory for service categories
 poll_interval: 3                         # Docker polling interval in seconds
 ```
 
-All paths support `~` expansion and environment variables. If no config file exists, defaults are used.
+All paths support `~` expansion and environment variables (`$XDG_CONFIG_HOME` falls back to `~/.config` if unset). If no config file exists, defaults are used.
+
+State is stored at `~/.config/lazyrmss/state.yaml`.
 
 ## Usage
 
@@ -188,7 +188,7 @@ All Docker commands prompt for confirmation before executing.
 
 ## How it works
 
-1. **Discovery** — On startup, lazyrmss scans `rmss_dir` for category directories, each containing service directories with `base.yaml` and optional addon files.
+1. **Discovery** — On startup, lazyrmss scans `resources_dir` for category directories, each containing service directories with `base.yaml` and optional addon files.
 
 2. **Composition** — When you toggle services and addons, lazyrmss deep-merges the active addon YAMLs into the base config and shows the result in the preview pane.
 
@@ -196,7 +196,7 @@ All Docker commands prompt for confirmation before executing.
 
 4. **Polling** — A background goroutine queries Docker every few seconds for running containers, networks, and volumes, updating the UI status indicators in real time.
 
-5. **State** — Enabled services and active addons are saved to `state.yaml` on every toggle, so your selections persist across sessions.
+5. **State** — Enabled services and active addons are saved to `~/.config/lazyrmss/state.yaml` on every toggle, so your selections persist across sessions.
 
 ## License
 

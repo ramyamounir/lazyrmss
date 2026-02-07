@@ -14,7 +14,7 @@ type OptionState struct {
 }
 
 func (a *App) loadState() error {
-	data, err := os.ReadFile(a.config.StateFile)
+	data, err := os.ReadFile(a.stateFilePath())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -71,6 +71,6 @@ func (a *App) saveState() error {
 		return err
 	}
 
-	os.MkdirAll(filepath.Dir(a.config.StateFile), 0755)
-	return os.WriteFile(a.config.StateFile, data, 0644)
+	os.MkdirAll(filepath.Dir(a.stateFilePath()), 0755)
+	return os.WriteFile(a.stateFilePath(), data, 0644)
 }

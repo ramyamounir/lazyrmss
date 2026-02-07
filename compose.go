@@ -17,9 +17,9 @@ import (
 // --- Discovery ---
 
 func (a *App) discoverAll() error {
-	entries, err := os.ReadDir(a.config.RMSSDir)
+	entries, err := os.ReadDir(a.config.ResourcesDir)
 	if err != nil {
-		return fmt.Errorf("reading rmss dir %s: %w", a.config.RMSSDir, err)
+		return fmt.Errorf("reading rmss dir %s: %w", a.config.ResourcesDir, err)
 	}
 
 	a.categories = nil
@@ -29,7 +29,7 @@ func (a *App) discoverAll() error {
 		}
 		cat := Category{
 			Name: entry.Name(),
-			Dir:  filepath.Join(a.config.RMSSDir, entry.Name()),
+			Dir:  filepath.Join(a.config.ResourcesDir, entry.Name()),
 		}
 		a.categories = append(a.categories, cat)
 

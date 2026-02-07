@@ -10,31 +10,26 @@ import (
 )
 
 type Config struct {
-	RMSSDir      string `yaml:"rmss_dir"`
-	StateFile    string `yaml:"state_file"`
+	ResourcesDir string `yaml:"resources_dir"`
 	PollInterval int    `yaml:"poll_interval"`
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		RMSSDir:      "~/.config/rmss",
-		StateFile:    "~/.config/rmss/state.yaml",
+		ResourcesDir: "$XDG_CONFIG_HOME/rmss",
 		PollInterval: 3,
 	}
 }
 
 func loadConfig() (*Config, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return DefaultConfig(), nil
-	}
-
-	configPath := filepath.Join(home, ".config", "rmss", "configs.yaml")
+	configPath := filepath.Join(configDir(), "config.yaml")
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return DefaultConfig(), nil
+			config := DefaultConfig()
+			config.ResourcesDir = expandPath(config.ResourcesDir)
+			return config, nil
 		}
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
@@ -44,16 +39,29 @@ func loadConfig() (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
-	config.RMSSDir = expandPath(config.RMSSDir)
-	config.StateFile = expandPath(config.StateFile)
+	config.ResourcesDir = expandPath(config.ResourcesDir)
 
 	return config, nil
+}
+
+func configDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "lazyrmss")
+}
+
+func (a *App) stateFilePath() string {
+	return filepath.Join(configDir(), "state.yaml")
 }
 
 func expandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, path[2:])
+	}
+	if strings.Contains(path, "$XDG_CONFIG_HOME") && os.Getenv("XDG_CONFIG_HOME") == "" {
+		home, _ := os.UserHomeDir()
+		path = strings.ReplaceAll(path, "$XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+		return path
 	}
 	return os.ExpandEnv(path)
 }

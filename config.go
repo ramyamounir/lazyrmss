@@ -10,14 +10,16 @@ import (
 )
 
 type Config struct {
-	RMSSDir   string `yaml:"rmss_dir"`
-	StateFile string `yaml:"state_file"`
+	RMSSDir      string `yaml:"rmss_dir"`
+	StateFile    string `yaml:"state_file"`
+	PollInterval int    `yaml:"poll_interval"`
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		RMSSDir:   "~/.config/rmss",
-		StateFile: "~/.config/rmss/state.yaml",
+		RMSSDir:      "~/.config/rmss",
+		StateFile:    "~/.config/rmss/state.yaml",
+		PollInterval: 3,
 	}
 }
 

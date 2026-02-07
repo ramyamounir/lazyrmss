@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -67,6 +69,7 @@ type App struct {
 	optionsList *tview.List
 	addonsList  *tview.List
 	previewView *tview.TextView
+	logView     *tview.TextView
 	statusBar   *tview.TextView
 
 	helpOpen      bool
@@ -77,6 +80,9 @@ type App struct {
 	categories   []Category
 	activeTabIdx int
 	options      map[string][]*Option
+
+	dockerStatus *DockerStatus
+	dockerCancel context.CancelFunc
 }
 
 func main() {
@@ -105,10 +111,28 @@ func main() {
 	a.setupUI()
 	a.refreshAll()
 
+	// Initialize Docker status polling
+	a.dockerStatus = &DockerStatus{
+		RunningContainers: make(map[string]bool),
+		ExistingNetworks:  make(map[string]bool),
+		ExistingVolumes:   make(map[string]bool),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.dockerCancel = cancel
+
+	interval := time.Duration(a.config.PollInterval) * time.Second
+	a.dockerStatus.StartPolling(ctx, interval, func() {
+		a.app.QueueUpdateDraw(func() {
+			a.refreshOptionsList()
+		})
+	})
+
 	if err := a.app.Run(); err != nil {
+		cancel()
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	cancel()
 }
 
 // --- Panel navigation ---

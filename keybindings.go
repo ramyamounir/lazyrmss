@@ -32,6 +32,48 @@ func (a *App) setupKeybindings() {
 
 		// === MAIN KEYBINDINGS ===
 
+		// Panel 0 only: Docker compose actions
+		if event.Key() == tcell.KeyRune && a.currentPanelIdx == 0 {
+			switch event.Rune() {
+			case 'u':
+				a.confirmSingleAction("Up", "up -d", tcell.ColorGreen, "up", "-d")
+				return nil
+			case 'U':
+				a.confirmGlobalAction("Up All", "up -d", tcell.ColorGreen, "up", "-d")
+				return nil
+			case 'd':
+				a.confirmSingleAction("Down", "down", tcell.ColorRed, "down")
+				return nil
+			case 'D':
+				a.confirmGlobalAction("Down All", "down", tcell.ColorRed, "down")
+				return nil
+			case 's':
+				a.confirmSingleAction("Stop", "stop", tcell.ColorYellow, "stop")
+				return nil
+			case 'S':
+				a.confirmGlobalAction("Stop All", "stop", tcell.ColorYellow, "stop")
+				return nil
+			case 'c':
+				a.confirmSingleAction("Start", "start", tcell.ColorGreen, "start")
+				return nil
+			case 'C':
+				a.confirmGlobalAction("Start All", "start", tcell.ColorGreen, "start")
+				return nil
+			case 'r':
+				a.confirmSingleAction("Restart", "restart", tcell.ColorYellow, "restart")
+				return nil
+			case 'R':
+				a.confirmGlobalAction("Restart All", "restart", tcell.ColorYellow, "restart")
+				return nil
+			case 'p':
+				a.confirmSingleAction("Pull", "pull", tcell.ColorBlue, "pull")
+				return nil
+			case 'P':
+				a.confirmGlobalAction("Pull All", "pull", tcell.ColorBlue, "pull")
+				return nil
+			}
+		}
+
 		switch event.Key() {
 		case tcell.KeyRune:
 			switch event.Rune() {
@@ -81,12 +123,6 @@ func (a *App) setupKeybindings() {
 				return nil
 			case 'e':
 				a.editResourceFile()
-				return nil
-			case 'u':
-				a.showComposeUpConfirm()
-				return nil
-			case 's':
-				a.showComposeDownConfirm()
 				return nil
 			case 'y':
 				a.copyPreviewToClipboard()

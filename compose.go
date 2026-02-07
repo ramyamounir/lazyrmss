@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/rivo/tview"
 	"gopkg.in/yaml.v3"
 )
 
@@ -197,51 +200,119 @@ func renderYAML(data map[string]interface{}) (string, error) {
 	return string(out), nil
 }
 
-// --- Docker Compose execution ---
+// --- Resource name extraction ---
 
-func (a *App) dockerComposeUp() {
-	global, err := a.buildGlobalCompose()
-	if err != nil {
-		return
+func extractContainerNames(resolved map[string]interface{}) []string {
+	services, ok := resolved["services"].(map[string]interface{})
+	if !ok {
+		return nil
 	}
-
-	yamlBytes, err := yaml.Marshal(global)
-	if err != nil {
-		return
+	var names []string
+	for svcKey, svcVal := range services {
+		svcMap, ok := svcVal.(map[string]interface{})
+		if !ok {
+			names = append(names, svcKey)
+			continue
+		}
+		if cn, ok := svcMap["container_name"].(string); ok && cn != "" {
+			names = append(names, cn)
+		} else {
+			names = append(names, svcKey)
+		}
 	}
-
-	tmpFile, err := os.CreateTemp("", "lazyrmss-compose-*.yaml")
-	if err != nil {
-		return
-	}
-	tmpPath := tmpFile.Name()
-
-	if _, err := tmpFile.Write(yamlBytes); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
-		return
-	}
-	tmpFile.Close()
-
-	a.app.Suspend(func() {
-		cmd := exec.Command("docker", "compose", "-f", tmpPath, "up", "-d")
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Run()
-		fmt.Println("\nPress Enter to return to LazyRMSS...")
-		fmt.Scanln()
-		os.Remove(tmpPath)
-	})
+	return names
 }
 
-func (a *App) dockerComposeDown() {
-	global, err := a.buildGlobalCompose()
-	if err != nil {
-		return
+func extractNetworkNames(resolved map[string]interface{}) []string {
+	networks, ok := resolved["networks"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	var names []string
+	for netKey, netVal := range networks {
+		netMap, ok := netVal.(map[string]interface{})
+		if !ok {
+			names = append(names, netKey)
+			continue
+		}
+		if n, ok := netMap["name"].(string); ok && n != "" {
+			names = append(names, n)
+		} else {
+			names = append(names, netKey)
+		}
+	}
+	return names
+}
+
+func extractVolumeNames(resolved map[string]interface{}) []string {
+	volumes, ok := resolved["volumes"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	var names []string
+	for volKey, volVal := range volumes {
+		volMap, ok := volVal.(map[string]interface{})
+		if !ok {
+			names = append(names, volKey)
+			continue
+		}
+		if n, ok := volMap["name"].(string); ok && n != "" {
+			names = append(names, n)
+		} else {
+			names = append(names, volKey)
+		}
+	}
+	return names
+}
+
+func (a *App) isOptionRunning(opt *Option) bool {
+	if a.dockerStatus == nil {
+		return false
 	}
 
-	yamlBytes, err := yaml.Marshal(global)
+	resolved, err := resolveOption(opt)
+	if err != nil {
+		return false
+	}
+
+	// Check based on the option's category
+	for _, name := range extractContainerNames(resolved) {
+		if a.dockerStatus.IsContainerRunning(name) {
+			return true
+		}
+	}
+	for _, name := range extractNetworkNames(resolved) {
+		if a.dockerStatus.IsNetworkExists(name) {
+			return true
+		}
+	}
+	for _, name := range extractVolumeNames(resolved) {
+		if a.dockerStatus.IsVolumeExists(name) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// --- Docker Compose execution ---
+
+type logWriter struct {
+	app  *tview.Application
+	view *tview.TextView
+	ansi io.Writer
+}
+
+func (w *logWriter) Write(p []byte) (n int, err error) {
+	w.app.QueueUpdateDraw(func() {
+		w.ansi.Write(p)
+		w.view.ScrollToEnd()
+	})
+	return len(p), nil
+}
+
+func (a *App) runDockerCompose(composeData map[string]interface{}, args ...string) {
+	yamlBytes, err := yaml.Marshal(composeData)
 	if err != nil {
 		return
 	}
@@ -259,14 +330,64 @@ func (a *App) dockerComposeDown() {
 	}
 	tmpFile.Close()
 
-	a.app.Suspend(func() {
-		cmd := exec.Command("docker", "compose", "-f", tmpPath, "down")
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Run()
-		fmt.Println("\nPress Enter to return to LazyRMSS...")
-		fmt.Scanln()
+	cmdStr := strings.Join(args, " ")
+	a.logView.Clear()
+	fmt.Fprintf(a.logView, "[yellow]$ docker compose %s[-]\n", cmdStr)
+
+	cmdArgs := append([]string{"compose", "-f", tmpPath}, args...)
+	cmd := exec.Command("docker", cmdArgs...)
+
+	writer := &logWriter{
+		app:  a.app,
+		view: a.logView,
+		ansi: tview.ANSIWriter(a.logView),
+	}
+	cmd.Stdout = writer
+	cmd.Stderr = writer
+
+	go func() {
+		err := cmd.Run()
 		os.Remove(tmpPath)
-	})
+		a.app.QueueUpdateDraw(func() {
+			if err != nil {
+				fmt.Fprintf(a.logView, "\n[red]✗ %v[-]\n", err)
+			} else {
+				fmt.Fprintf(a.logView, "\n[green]✓ Done[-]\n")
+			}
+			a.logView.ScrollToEnd()
+		})
+		a.refreshDockerStatus()
+	}()
+}
+
+func (a *App) dockerComposeGlobal(args ...string) {
+	global, err := a.buildGlobalCompose()
+	if err != nil {
+		return
+	}
+	a.runDockerCompose(global, args...)
+}
+
+func (a *App) dockerComposeSingle(args ...string) {
+	opt := a.getSelectedOption()
+	if opt == nil {
+		return
+	}
+	resolved, err := resolveOption(opt)
+	if err != nil {
+		return
+	}
+	a.runDockerCompose(resolved, args...)
+}
+
+func (a *App) refreshDockerStatus() {
+	if a.dockerStatus == nil {
+		return
+	}
+	go func() {
+		a.dockerStatus.poll(context.Background())
+		a.app.QueueUpdateDraw(func() {
+			a.refreshOptionsList()
+		})
+	}()
 }

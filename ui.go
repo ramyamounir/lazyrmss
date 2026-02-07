@@ -57,6 +57,16 @@ func (a *App) setupUI() {
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderColor(tcell.ColorDefault)
 
+	// Log panel
+	a.logView = tview.NewTextView().
+		SetDynamicColors(true).
+		SetWordWrap(true).
+		SetScrollable(true)
+	a.logView.SetBorder(true).
+		SetTitle(" Log ").
+		SetTitleAlign(tview.AlignLeft).
+		SetBorderColor(tcell.ColorDefault)
+
 	// Status bar
 	a.statusBar = tview.NewTextView().
 		SetDynamicColors(true).
@@ -71,9 +81,13 @@ func (a *App) setupUI() {
 		AddItem(a.optionsList, 0, 2, true).
 		AddItem(a.addonsList, 0, 1, false)
 
+	rightFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.previewView, 0, 1, false).
+		AddItem(a.logView, 0, 1, false)
+
 	mainFlex := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(leftFlex, 0, 1, true).
-		AddItem(a.previewView, 0, 2, false)
+		AddItem(rightFlex, 0, 2, false)
 
 	rootFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(mainFlex, 0, 1, true).
@@ -106,7 +120,8 @@ func (a *App) refreshOptionsList() {
 
 	options := a.getCurrentOptions()
 	for _, opt := range options {
-		label := formatOptionLabel(opt)
+		running := a.isOptionRunning(opt)
+		label := formatOptionLabel(opt, running)
 		a.optionsList.AddItem(label, "", 0, nil)
 	}
 
@@ -145,21 +160,24 @@ func (a *App) refreshAddonsList() {
 	}
 }
 
-func formatOptionLabel(opt *Option) string {
+func formatOptionLabel(opt *Option, running bool) string {
 	var b strings.Builder
 
-	if opt.Enabled {
+	// Circle: indicates Docker host status (running/exists)
+	if running {
 		b.WriteString("[green]\u25cf[-] ")
 	} else {
 		b.WriteString("[white]\u25cb[-] ")
 	}
 
+	// Name color: indicates compose configuration inclusion
 	if opt.Enabled {
 		b.WriteString(fmt.Sprintf("[green]%s[-]", opt.Name))
 	} else {
 		b.WriteString(fmt.Sprintf("[white]%s[-]", opt.Name))
 	}
 
+	// Addon labels: indicate addon activation status
 	for _, addon := range opt.Addons {
 		if opt.ActiveAddons[addon.Name] {
 			b.WriteString(fmt.Sprintf(" [green](%s)[-]", addon.Label))
@@ -266,7 +284,7 @@ func (a *App) updatePreview() {
 // --- Status bar ---
 
 func (a *App) updateStatusBar() {
-	a.statusBar.SetText(" [yellow]j/k[-] navigate  [yellow]space[-] toggle  [yellow]e[-] edit  [yellow]1/2[-] panels  [yellow]u[-] up  [yellow]s[-] down  [yellow]y[-] copy  [yellow]?[-] help  [yellow][\\[/\\]][-] tabs  [yellow]q[-] quit")
+	a.statusBar.SetText(" [yellow]j/k[-] nav  [yellow]space[-] toggle  [yellow]e[-] edit  [yellow]u[-]p [yellow]d[-]own [yellow]s[-]top [yellow]c[-]ontinue [yellow]r[-]estart [yellow]p[-]ull  [yellow]SHIFT[-]=all  [yellow]y[-] copy  [yellow]?[-] help  [yellow]q[-] quit")
 }
 
 // --- Actions ---
@@ -307,44 +325,40 @@ func (a *App) toggleAddon() {
 
 // --- Confirm modals ---
 
-func (a *App) showComposeUpConfirm() {
+func (a *App) showDockerConfirm(title, message string, borderColor tcell.Color, action func()) {
 	a.confirmOpen = true
-	a.confirmAction = func() {
-		a.dockerComposeUp()
-	}
+	a.confirmAction = action
 
 	text := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText("[yellow::b]Docker Compose Up[-:-:-]\n\nRun [green]docker compose up -d[-] with the current configuration?\n\n[green]Enter[-] to confirm    [yellow]Esc/q[-] to cancel")
+		SetText(message + "\n\n[green]Enter[-] to confirm    [yellow]Esc/q[-] to cancel")
 
 	text.SetBorder(true).
-		SetTitle(" Confirm ").
+		SetTitle(fmt.Sprintf(" %s ", title)).
 		SetTitleAlign(tview.AlignCenter).
-		SetBorderColor(tcell.ColorGreen)
+		SetBorderColor(borderColor)
 
 	a.pages.AddPage("confirm", modal(text, 55, 9), true, true)
 	a.app.SetFocus(text)
 }
 
-func (a *App) showComposeDownConfirm() {
-	a.confirmOpen = true
-	a.confirmAction = func() {
-		a.dockerComposeDown()
+func (a *App) confirmSingleAction(title, desc string, color tcell.Color, args ...string) {
+	opt := a.getSelectedOption()
+	if opt == nil {
+		return
 	}
+	msg := fmt.Sprintf("[yellow::b]%s[-:-:-]\n\nRun [green]docker compose %s[-] for [green]%s[-]?", title, desc, opt.Name)
+	a.showDockerConfirm(title, msg, color, func() {
+		a.dockerComposeSingle(args...)
+	})
+}
 
-	text := tview.NewTextView().
-		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter).
-		SetText("[yellow::b]Docker Compose Down[-:-:-]\n\nRun [red]docker compose down[-] to stop all services?\n\n[green]Enter[-] to confirm    [yellow]Esc/q[-] to cancel")
-
-	text.SetBorder(true).
-		SetTitle(" Confirm ").
-		SetTitleAlign(tview.AlignCenter).
-		SetBorderColor(tcell.ColorRed)
-
-	a.pages.AddPage("confirm", modal(text, 55, 9), true, true)
-	a.app.SetFocus(text)
+func (a *App) confirmGlobalAction(title, desc string, color tcell.Color, args ...string) {
+	msg := fmt.Sprintf("[yellow::b]%s[-:-:-]\n\nRun [green]docker compose %s[-] for all enabled services?", title, desc)
+	a.showDockerConfirm(title, msg, color, func() {
+		a.dockerComposeGlobal(args...)
+	})
 }
 
 func (a *App) closeConfirm() {
@@ -372,11 +386,16 @@ func (a *App) showHelp() {
 			"  2 / a         Jump to overrides\n" +
 			"  Tab           Cycle panels\n" +
 			"  Esc           Back / quit\n\n" +
+			"[green]Docker (panel 1, lowercase=single, SHIFT=all):[-]\n" +
+			"  u / U         Up (start containers)\n" +
+			"  d / D         Down (remove containers)\n" +
+			"  s / S         Stop containers\n" +
+			"  c / C         Continue (start stopped)\n" +
+			"  r / R         Restart containers\n" +
+			"  p / P         Pull images\n\n" +
 			"[green]Actions:[-]\n" +
 			"  Space / Enter Toggle item\n" +
 			"  e             Edit resource file\n" +
-			"  u             Docker compose up\n" +
-			"  s             Docker compose down\n" +
 			"  y             Copy preview YAML\n" +
 			"  Y             Copy global compose\n\n" +
 			"[green]Meta:[-]\n" +

@@ -45,12 +45,29 @@ func loadConfig() (*Config, error) {
 }
 
 func configDir() string {
+	if dir := os.Getenv("LAZYRMSS_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "lazyrmss")
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "lazyrmss")
 }
 
+func dataDir() string {
+	if dir := os.Getenv("LAZYRMSS_DATA_DIR"); dir != "" {
+		return dir
+	}
+	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+		return filepath.Join(xdg, "lazyrmss")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "share", "lazyrmss")
+}
+
 func (a *App) stateFilePath() string {
-	return filepath.Join(configDir(), "state.yaml")
+	return filepath.Join(dataDir(), "state.yaml")
 }
 
 func expandPath(path string) string {
@@ -58,9 +75,13 @@ func expandPath(path string) string {
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, path[2:])
 	}
+	home, _ := os.UserHomeDir()
 	if strings.Contains(path, "$XDG_CONFIG_HOME") && os.Getenv("XDG_CONFIG_HOME") == "" {
-		home, _ := os.UserHomeDir()
 		path = strings.ReplaceAll(path, "$XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+		return path
+	}
+	if strings.Contains(path, "$XDG_DATA_HOME") && os.Getenv("XDG_DATA_HOME") == "" {
+		path = strings.ReplaceAll(path, "$XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
 		return path
 	}
 	return os.ExpandEnv(path)

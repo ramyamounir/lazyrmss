@@ -105,9 +105,18 @@ resources_dir: "$XDG_CONFIG_HOME/rmss"  # root directory for service categories
 poll_interval: 3                         # Docker polling interval in seconds
 ```
 
-All paths support `~` expansion and environment variables (`$XDG_CONFIG_HOME` falls back to `~/.config` if unset). If no config file exists, defaults are used.
+All paths support `~` expansion and environment variables (`$XDG_CONFIG_HOME` and `$XDG_DATA_HOME` fall back to `~/.config` and `~/.local/share` respectively if unset). If no config file exists, defaults are used.
 
-State is stored at `~/.config/lazyrmss/state.yaml`.
+### Directories
+
+lazyrmss follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/).
+
+| Purpose | Resolution order |
+|---|---|
+| Config (`config.yaml`) | `$LAZYRMSS_CONFIG_DIR` > `$XDG_CONFIG_HOME/lazyrmss` > `~/.config/lazyrmss` |
+| Data (`state.yaml`) | `$LAZYRMSS_DATA_DIR` > `$XDG_DATA_HOME/lazyrmss` > `~/.local/share/lazyrmss` |
+
+The `resources_dir` is defined in `config.yaml` and is independent of these directories.
 
 ## Usage
 
@@ -196,7 +205,7 @@ All Docker commands prompt for confirmation before executing.
 
 4. **Polling** — A background goroutine queries Docker every few seconds for running containers, networks, and volumes, updating the UI status indicators in real time.
 
-5. **State** — Enabled services and active addons are saved to `~/.config/lazyrmss/state.yaml` on every toggle, so your selections persist across sessions.
+5. **State** — Enabled services and active addons are saved to `state.yaml` in the data directory on every toggle, so your selections persist across sessions.
 
 ## License
 

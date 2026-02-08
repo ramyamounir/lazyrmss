@@ -2,8 +2,12 @@
 
 BINARY_NAME=lazyrmss
 INSTALL_PATH=$(HOME)/.local/bin
+GO := $(shell command -v go 2>/dev/null)
 
 build:
+ifndef GO
+	$(error "go is not installed. Install it from https://go.dev/dl/")
+endif
 	go build -o $(BINARY_NAME) .
 
 install: build
